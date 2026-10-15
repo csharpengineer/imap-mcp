@@ -18,16 +18,16 @@ def test_modified_utf7_roundtrip(plain, encoded):
 
 def test_parse_list_quoted_literal_and_utf7():
     data = [
-        b'(\HasNoChildren) "/" "INBOX"',
-        b'(\HasNoChildren \Sent) "/" "[Gmail]/Sent Mail"',
-        b'(\HasNoChildren) "/" Entw&APw-rfe',
-        (b'(\HasNoChildren \Trash) "/" {9}', b'Odd"Name'),
+        rb'(\HasNoChildren) "/" "INBOX"',
+        rb'(\HasNoChildren \Sent) "/" "[Gmail]/Sent Mail"',
+        rb'(\HasNoChildren) "/" Entw&APw-rfe',
+        (rb'(\HasNoChildren \Trash) "/" {8}', b'Odd"Name'),
     ]
     assert parse_list(data) == [
         {"name": "INBOX"},
-        {"name": "[Gmail]/Sent Mail", "flags": ["\Sent"]},
+        {"name": "[Gmail]/Sent Mail", "flags": [r"\Sent"]},
         {"name": "Entwürfe"},
-        {"name": 'Odd"Name', "flags": ["\Trash"]},
+        {"name": 'Odd"Name', "flags": [r"\Trash"]},
     ]
 
 
