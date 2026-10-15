@@ -1,0 +1,23 @@
+[project]
+name = "imap-mcp"
+version = "0.1.0"
+description = "Read-only IMAP MCP server: search and read mail without being able to change it."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["mcp==2.3.0"]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+
+[project.scripts]
+imap-mcp = "imap_mcp.server:main"
+
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/imap_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
