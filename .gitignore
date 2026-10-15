@@ -20,3 +20,6 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# local account files (copy accounts.example.json); contain no passwords but may identify you
+accounts.json
