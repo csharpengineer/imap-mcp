@@ -6,7 +6,7 @@ import pytest
 
 from imap_mcp import client
 from imap_mcp.client import Mailbox, MailError, build_search
-from imap_mcp.config import Config
+from fake_imap import PASSWORD
 
 READ_ONLY_WIRE = {"CAPABILITY", "LOGIN", "LOGOUT", "LIST", "EXAMINE", "UID SEARCH", "UID FETCH"}
 
@@ -28,12 +28,12 @@ def flags_snapshot(server):
 
 
 def test_list_folders(config, fake_server):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         assert box.list_folders() == [{"name": "INBOX"}, {"name": "Sent"}]
 
 
 def test_search_defaults_newest_first_with_snippets(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         res = box.search("INBOX", limit=3)
     assert res["total"] == 8
     assert [m["uid"] for m in res["messages"]] == [8, 7, 6]
@@ -66,14 +66,14 @@ def test_search_defaults_newest_first_with_snippets(config):
     ],
 )
 def test_search_filters(config, criteria, expected):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         res = box.search("INBOX", limit=50, **criteria)
     assert [m["uid"] for m in res["messages"]] == expected
     assert res["total"] == len(expected)
 
 
 def test_search_limit_is_capped(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         assert box.search("INBOX", limit=0)["returned"] == 1
         assert box.search("INBOX", limit=10_000)["returned"] == 8
 
@@ -89,7 +89,7 @@ def test_search_rejects_bad_input():
 
 
 def test_get_message_multipart_alternative_prefers_plain(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         msg = box.get_message("INBOX", 2, 4000)
     assert msg["body"] == "Plain version: tacos at noon?"
     assert msg["body_format"] == "text/plain"
@@ -98,7 +98,7 @@ def test_get_message_multipart_alternative_prefers_plain(config):
 
 
 def test_get_message_html_only(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         msg = box.get_message("INBOX", 3, 4000)
     assert msg["subject"] == "Café menu ☕"
     assert msg["from"] == "Carol Élise <carol@example.com>"
@@ -108,7 +108,7 @@ def test_get_message_html_only(config):
 
 
 def test_get_message_latin1_quoted_printable(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         msg = box.get_message("INBOX", 4, 4000)
     assert msg["from"] == "Jürgen Müller <juergen@example.de>"
     assert msg["subject"] == "Grüße aus Köln"
@@ -117,13 +117,13 @@ def test_get_message_latin1_quoted_printable(config):
 
 
 def test_get_message_unknown_charset_label_falls_back(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         msg = box.get_message("INBOX", 5, 4000)
     assert msg["body"] == "“Quoted” – dash"
 
 
 def test_get_message_attachment_metadata_only(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         msg = box.get_message("INBOX", 6, 4000)
     assert msg["body"] == "Thanks, attached the slides."
     assert msg["attachments"] == [
@@ -133,7 +133,7 @@ def test_get_message_attachment_metadata_only(config):
 
 
 def test_get_message_truncates(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         short = box.get_message("INBOX", 7, 500)
         default = box.get_message("INBOX", 7, client.BODY_CHARS_DEFAULT)
         huge = box.get_message("INBOX", 7, 10**9)
@@ -141,13 +141,13 @@ def test_get_message_truncates(config):
     assert len(short["body"]) <= 502 and short["body"].endswith("…")
     assert len(default["body"]) <= client.BODY_CHARS_DEFAULT + 2
     assert len(huge["body"]) <= client.BODY_CHARS_MAX + 2  # hard cap
-    with Mailbox(Config(**{**config.__dict__})) as box:
+    with Mailbox(config, PASSWORD) as box:
         full = box.get_message("INBOX", 1, 4000)
     assert full["body_truncated"] is False
 
 
 def test_get_message_missing_uid_and_folder(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         with pytest.raises(MailError, match="no message with uid 999"):
             box.get_message("INBOX", 999, 4000)
         with pytest.raises(MailError, match="opening folder 'Nope'"):
@@ -155,21 +155,21 @@ def test_get_message_missing_uid_and_folder(config):
 
 
 def test_thread_by_references(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         res = box.get_thread("INBOX", 6, 20)
     assert res["method"] == "references"
     assert [m["uid"] for m in res["messages"]] == [1, 6]
 
 
 def test_thread_falls_back_to_subject(config):
-    with Mailbox(config) as box:
+    with Mailbox(config, PASSWORD) as box:
         res = box.get_thread("INBOX", 2, 20)
     assert res["method"] == "subject"
     assert [m["uid"] for m in res["messages"]] == [2, 8]
 
 
 def test_thread_gmail_thrid_uses_all_mail(gmail_config, gmail_server):
-    with Mailbox(gmail_config) as box:
+    with Mailbox(gmail_config, PASSWORD) as box:
         res = box.get_thread("INBOX", 2, 20)
     assert res["method"] == "gmail-thrid"
     assert res["folder"] == "[Gmail]/All Mail"
@@ -179,26 +179,26 @@ def test_thread_gmail_thrid_uses_all_mail(gmail_config, gmail_server):
 
 
 def test_gmail_folder_flags(gmail_config):
-    with Mailbox(gmail_config) as box:
+    with Mailbox(gmail_config, PASSWORD) as box:
         folders = box.list_folders()
     assert {"name": "[Gmail]/All Mail", "flags": ["\\All"]} in folders
     assert {"name": "[Gmail]", "flags": ["\\Noselect"]} in folders
 
 
 def test_bad_password_is_reported_without_leaking_it(fake_server, config):
-    bad = Config(**{**config.__dict__, "password": "hunter2-secret"})
+    box = Mailbox(config, "hunter2-secret")
     with pytest.raises(MailError) as err:
-        with Mailbox(bad):
-            pass
-    assert "AUTHENTICATIONFAILED" in str(err.value)
-    assert "hunter2" not in str(err.value) and "hunter2" not in repr(bad)
+        box.connect()
+    assert "AUTHENTICATIONFAILED" in str(err.value) and "'test'" in str(err.value)
+    assert "hunter2" not in str(err.value)
+    assert "hunter2" not in repr(vars(box))  # password not retained after connect
 
 
 def test_every_tool_is_read_only_on_the_wire(config, fake_server, gmail_config, gmail_server):
     """Run every operation, then prove no mutating command was sent and no flags changed."""
     for server, cfg in ((fake_server, config), (gmail_server, gmail_config)):
         before = flags_snapshot(server)
-        with Mailbox(cfg) as box:
+        with Mailbox(cfg, PASSWORD) as box:
             box.list_folders()
             box.search("INBOX", limit=50)
             box.search("INBOX", limit=50, subject="Grüße", unseen_only=True)

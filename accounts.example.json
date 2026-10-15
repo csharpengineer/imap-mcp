@@ -1,0 +1,19 @@
+{
+  "accounts": {
+    "gmail": {
+      "host": "imap.gmail.com",
+      "port": 993,
+      "user": "you@gmail.com",
+      "ssl": true,
+      "password_env": "GMAIL_IMAP_PASS"
+    },
+    "work": {
+      "host": "mail.example.com",
+      "port": 993,
+      "user": "you@example.com",
+      "ssl": true,
+      "timeout": 30,
+      "password_env": "WORK_IMAP_PASS"
+    }
+  }
+}

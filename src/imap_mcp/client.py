@@ -1,8 +1,8 @@
 """Read-only IMAP operations behind the MCP tools.
 
-One connection per tool call: connect, LOGIN, EXAMINE (never SELECT), fetch
-with BODY.PEEK, LOGOUT. That avoids stale-connection handling at the cost of
-a login round-trip per call, which is fine at agent call rates.
+Every operation opens folders with EXAMINE (never SELECT) and fetches with
+BODY.PEEK, so nothing here can change mailbox state. Connection reuse and
+reconnects live in accounts.AccountPool.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import ssl
 from typing import Any
 
 from . import imap_utf7, mime
-from .config import Config
+from .config import AccountConfig
 from .guard import ReadOnlyIMAP4, ReadOnlyIMAP4_SSL
 
 SEARCH_LIMIT_MAX = 50
@@ -183,44 +183,54 @@ def _uids(data: list[Any]) -> list[int]:
 # ---------------------------------------------------------------------- client
 
 class Mailbox:
-    """Context manager wrapping one read-only IMAP session."""
+    """One read-only IMAP session for one account.
 
-    def __init__(self, config: Config):
-        self.config = config
+    Use as a context manager, or call connect()/close() to keep it open
+    across calls (see accounts.AccountPool).
+    """
+
+    def __init__(self, account: AccountConfig, password: str):
+        self.account = account
+        # Kept only until connect(); not retained afterwards.
+        self._password: str | None = password
         self.conn: Any = None
         self.capabilities: set[str] = set()
 
-    def __enter__(self) -> "Mailbox":
-        cfg = self.config
+    def connect(self) -> "Mailbox":
+        acct = self.account
+        password, self._password = self._password, None
         try:
-            if cfg.ssl:
+            if acct.ssl:
                 self.conn = ReadOnlyIMAP4_SSL(
-                    cfg.host, cfg.port, ssl_context=ssl.create_default_context(), timeout=cfg.timeout
+                    acct.host, acct.port, ssl_context=ssl.create_default_context(), timeout=acct.timeout
                 )
             else:
-                self.conn = ReadOnlyIMAP4(cfg.host, cfg.port, timeout=cfg.timeout)
+                self.conn = ReadOnlyIMAP4(acct.host, acct.port, timeout=acct.timeout)
                 if "STARTTLS" in self.conn.capabilities:
                     self.conn.starttls(ssl.create_default_context())
-            self.conn.login(cfg.user, cfg.password)
-        except MailError:
-            raise
+            self.conn.login(acct.user, password)
         except Exception as exc:
-            self._close()
-            # Server/OS messages never contain the password; the config repr hides it.
-            raise MailError(f"IMAP connection/login to {cfg.host}:{cfg.port} failed: {exc}") from None
+            self.close()
+            # Server/OS error text never contains the password.
+            raise MailError(
+                f"account {acct.name!r}: connection/login to {acct.host}:{acct.port} failed: {exc}"
+            ) from None
         self.capabilities = {str(c).upper() for c in self.conn.capabilities}
         return self
 
-    def __exit__(self, *exc: object) -> None:
-        self._close()
-
-    def _close(self) -> None:
+    def close(self) -> None:
         if self.conn is not None:
             try:
                 self.conn.logout()
             except Exception:
                 pass
             self.conn = None
+
+    def __enter__(self) -> "Mailbox":
+        return self.connect()
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     # -- primitives
 

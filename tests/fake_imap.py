@@ -11,6 +11,7 @@ from __future__ import annotations
 import email
 import email.policy
 import re
+import socket
 import socketserver
 import threading
 from dataclasses import dataclass, field
@@ -44,6 +45,8 @@ class FakeIMAPServer:
         self.folders = {f.name: f for f in folders}
         self.capabilities = capabilities or ["IMAP4rev1", "AUTH=PLAIN"]
         self.commands: list[str] = []  # every command line, password redacted
+        self.logins = 0
+        self._sockets: list[socket.socket] = []
         self._server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), self._handler())
         self._server.daemon_threads = True
         self.port = self._server.server_address[1]
@@ -56,6 +59,15 @@ class FakeIMAPServer:
     def __exit__(self, *exc):
         self._server.shutdown()
         self._server.server_close()
+
+    def drop_connections(self) -> None:
+        """Simulate the server (or network) killing every open session."""
+        for sock in self._sockets:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        self._sockets.clear()
 
     @property
     def command_names(self) -> list[str]:
@@ -73,7 +85,11 @@ class FakeIMAPServer:
 
         class Handler(socketserver.StreamRequestHandler):
             def handle(self):
-                Session(server, self.rfile, self.wfile).run()
+                server._sockets.append(self.request)
+                try:
+                    Session(server, self.rfile, self.wfile).run()
+                except OSError:
+                    pass  # connection dropped by drop_connections()
 
         return Handler
 
@@ -144,6 +160,7 @@ class Session:
     def do_LOGIN(self, tag, args, lits):
         user, password = [_unquote(t) for t in tokenize(args, lits)[:2]]
         if (user, password) == (USER, PASSWORD):
+            self.server.logins += 1
             self.send(f"{tag} OK logged in\r\n")
         else:
             self.send(f"{tag} NO [AUTHENTICATIONFAILED] Invalid credentials\r\n")

@@ -4,7 +4,6 @@ import pytest
 
 from imap_mcp import imap_utf7, mime
 from imap_mcp.client import normalize_subject, parse_list
-from imap_mcp.config import Config, ConfigError
 
 
 @pytest.mark.parametrize(
@@ -51,15 +50,3 @@ def test_header_decoding_never_raises():
     assert mime.decode_mime_header("=?bogus-charset?Q?abc?=") != ""
     assert mime.format_addresses("=?utf-8?Q?Zo=C3=AB?= <zoe@example.com>") == "Zoë <zoe@example.com>"
     assert mime.format_date("not a date") == "not a date"
-
-
-def test_config_from_env_defaults_and_secret_hidden():
-    cfg = Config.from_env({"IMAP_HOST": "imap.example.com", "IMAP_USER": "u", "IMAP_PASS": "s3cret"})
-    assert (cfg.port, cfg.ssl, cfg.timeout) == (993, True, 30.0)
-    assert "s3cret" not in repr(cfg)
-    plain = Config.from_env({"IMAP_HOST": "h", "IMAP_USER": "u", "IMAP_PASS": "p", "IMAP_SSL": "false"})
-    assert plain.port == 143
-    with pytest.raises(ConfigError, match="IMAP_HOST"):
-        Config.from_env({"IMAP_USER": "u", "IMAP_PASS": "p"})
-    with pytest.raises(ConfigError, match="IMAP_SSL"):
-        Config.from_env({"IMAP_HOST": "h", "IMAP_USER": "u", "IMAP_PASS": "p", "IMAP_SSL": "maybe"})

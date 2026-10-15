@@ -5,7 +5,7 @@ import base64
 import pytest
 
 from fake_imap import PASSWORD, USER, FakeFolder, FakeIMAPServer, FakeMessage
-from imap_mcp.config import Config
+from imap_mcp.config import AccountConfig
 
 
 def crlf(text: str) -> bytes:
@@ -200,15 +200,17 @@ Content-Type: text/plain; charset=utf-8
         yield srv
 
 
-def config_for(server: FakeIMAPServer, password: str = PASSWORD) -> Config:
-    return Config(host="127.0.0.1", port=server.port, user=USER, password=password, ssl=False, timeout=5)
+def config_for(server: FakeIMAPServer, name: str = "test", password_env: str = "TEST_IMAP_PASS") -> AccountConfig:
+    return AccountConfig(
+        name=name, host="127.0.0.1", port=server.port, user=USER, password_env=password_env, ssl=False, timeout=5
+    )
 
 
 @pytest.fixture
-def config(fake_server) -> Config:
+def config(fake_server) -> AccountConfig:
     return config_for(fake_server)
 
 
 @pytest.fixture
-def gmail_config(gmail_server) -> Config:
-    return config_for(gmail_server)
+def gmail_config(gmail_server) -> AccountConfig:
+    return config_for(gmail_server, name="gmail", password_env="GMAIL_IMAP_PASS")
